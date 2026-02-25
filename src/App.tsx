@@ -32,7 +32,7 @@ import {
   FileText,
   AlertCircle
 } from 'lucide-react';
-import { motion, AnimatePresence, useInView } from 'framer-motion';
+
 import { 
   LineChart, 
   Line, 
@@ -52,9 +52,11 @@ import { format, parseISO } from 'date-fns';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import Papa from 'papaparse';
+import { motion, useInView } from 'framer-motion';
 
 import { MOCK_MENTIONS, Mention } from './constants';
-import { analyzeSentiment, getDashboardInsights, SentimentAnalysis, DashboardInsights } from './services/geminiService';
+import kanaLogo from './logo/Logo.png';
+
 import ReviewCarousel from './ReviewCarousel';
 
 function cn(...inputs: ClassValue[]) {
@@ -62,6 +64,83 @@ function cn(...inputs: ClassValue[]) {
 }
 
 type Page = 'home' | 'data-management' | 'reviews';
+
+type SentimentType = 'positive' | 'neutral' | 'negative';
+
+interface SentimentAnalysis {
+  mentionId: string;
+  sentiment: SentimentType;
+  score: number;
+  entity: string;
+}
+
+interface TopicItem {
+  entity: string;
+  total: number;
+  positive: number;
+  neutral: number;
+  negative: number;
+}
+
+interface DashboardInsights {
+  summary: string;
+  recommendations: string[];
+  trendAnalysis: string;
+}
+
+const formatPct = (value: number) => `${value.toFixed(1)}%`;
+
+const getDashboardInsights = async (
+  allMentions: Mention[],
+  allAnalyses: SentimentAnalysis[],
+  topTopics: TopicItem[]
+): Promise<DashboardInsights> => {
+  const totalReviews = allMentions.length;
+
+  if (!totalReviews) {
+    return {
+      summary: 'Belum ada data untuk diringkas. Upload CSV agar AI Executive Summary ter-generate otomatis.',
+      recommendations: [],
+      trendAnalysis: 'Analisis topik dan sentimen akan muncul setelah data tersedia.'
+    };
+  }
+
+  const sentimentCounts = allAnalyses.reduce((acc, analysis) => {
+    acc[analysis.sentiment] += 1;
+    return acc;
+  }, { positive: 0, neutral: 0, negative: 0 } as Record<SentimentType, number>);
+
+  const positivePct = (sentimentCounts.positive / totalReviews) * 100;
+  const neutralPct = (sentimentCounts.neutral / totalReviews) * 100;
+  const negativePct = (sentimentCounts.negative / totalReviews) * 100;
+  const netSentiment = ((sentimentCounts.positive - sentimentCounts.negative) / totalReviews) * 100;
+
+  const sortedByNegative = [...topTopics].sort((a, b) => (b.negative || 0) - (a.negative || 0));
+  const sortedByPositive = [...topTopics].sort((a, b) => (b.positive || 0) - (a.positive || 0));
+  const mainRiskTopic = sortedByNegative[0];
+  const strongestTopic = sortedByPositive[0];
+  const topicList = topTopics.map((topic) => topic.entity).join(', ');
+
+  const summary = `Dari ${totalReviews} ulasan, sentimen didominasi positif (${formatPct(positivePct)}), dengan sentimen bersih ${formatPct(netSentiment)}. Lima topik utama yang paling sering dibahas: ${topicList || 'belum tersedia'}. Isu negatif terbesar saat ini berada pada topik ${mainRiskTopic?.entity || 'General'} (${mainRiskTopic?.negative || 0} ulasan negatif), sementara kekuatan utama brand ada di topik ${strongestTopic?.entity || 'General'} (${strongestTopic?.positive || 0} ulasan positif).`;
+
+  const recommendations = [
+    mainRiskTopic
+      ? `Prioritaskan perbaikan pada topik ${mainRiskTopic.entity} untuk menurunkan porsi sentimen negatif.`
+      : 'Prioritaskan area dengan sentimen negatif tertinggi.',
+    strongestTopic
+      ? `Pertahankan keunggulan pada topik ${strongestTopic.entity} sebagai nilai jual utama.`
+      : 'Pertahankan kualitas pada topik dengan sentimen positif terbesar.',
+    'Monitor perubahan sentimen setelah upload data terbaru untuk melihat dampak perbaikan secara berkala.'
+  ];
+
+  const trendAnalysis = `Ringkasan sentimen: Positif ${formatPct(positivePct)}, Netral ${formatPct(neutralPct)}, Negatif ${formatPct(negativePct)}. KPI menunjukkan total ${totalReviews} ulasan dengan fokus analisis pada 5 topik teratas.`;
+
+  return {
+    summary,
+    recommendations,
+    trendAnalysis
+  };
+};
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -115,7 +194,7 @@ export default function App() {
         setMentions(dbMentions);
         setAnalyses(dbAnalyses);
         
-        const insightResults = await getDashboardInsights(dbMentions, dbAnalyses);
+        const insightResults = await getDashboardInsights(dbMentions, dbAnalyses, topicsData);
         setInsights(insightResults);
       } else {
         // Database is empty or filtered to empty
@@ -162,7 +241,7 @@ export default function App() {
         total_positive: 0,
         total_negative: 0,
         total_neutral: 0,
-        last_updated: new Date().toISOString()
+        last_updated: null
       });
       
       await fetchData(); 
@@ -290,13 +369,9 @@ export default function App() {
         <div className="flex items-center gap-4">
           <div className="h-10 md:h-12 flex items-center cursor-pointer" onClick={() => setCurrentPage('home')}>
             <img 
-              src="/src/logo/Logo.png" 
+              src={kanaLogo}
               alt="Kana Coffee Logo" 
-              className="h-full w-auto object-contain"
-              onError={(e) => {
-                e.currentTarget.src = "https://picsum.photos/seed/kana/200/100";
-                e.currentTarget.className = "h-8 opacity-20 grayscale";
-              }}
+              className="h-full w-auto object-contain brightness-0 invert drop-shadow-[0_1px_2px_rgba(0,0,0,0.35)]"
             />
           </div>
           <div className="h-8 w-px bg-white/20 mx-1 hidden sm:block" />
@@ -403,20 +478,20 @@ export default function App() {
                       <div className="space-y-4">
                         <span className="inline-flex items-center gap-2.5 px-4 py-1.5 bg-[#7A2E0E]/5 text-[#7A2E0E] text-[11px] font-bold uppercase tracking-[0.15em] rounded-full border border-[#7A2E0E]/10">
                           <BrainCircuit size={14} />
-                          Generated by Kana Insights AI
+                          Dihasilkan oleh Kana Insights AI
                         </span>
                         <p className="text-3xl leading-[1.4] text-[#141414]/90 font-medium font-serif italic">
-                          “In the last 6 months, public sentiment is mostly <span className="text-[#6E7C3A] font-bold">positive ({stats.sentimentCounts.positive > 0 ? ((stats.sentimentCounts.positive / stats.totalMentions) * 100).toFixed(0) : 65}%)</span>. However, <span className="text-[#B0412E] font-bold">{stats.sentimentCounts.negative > 0 ? ((stats.sentimentCounts.negative / stats.totalMentions) * 100).toFixed(0) : 23}% negative sentiment</span> is mainly related to cashier service and slow response.”
+                          “{insights?.summary || 'Sedang menganalisis KPI, ringkasan sentimen, dan 5 topik utama dari data upload terbaru...'}”
                         </p>
                       </div>
                       
                       <div className="pt-8 border-t border-[#141414]/5 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                         <p className="text-base text-[#141414]/50 italic max-w-lg leading-relaxed">
-                          {insights?.summary || "Analyzing brand reputation trends across digital platforms..."}
+                          {insights?.trendAnalysis || "Analisis tren akan dibuat otomatis setelah upload CSV terbaru."}
                         </p>
                         <div className="flex items-center gap-2.5 text-[11px] font-mono text-[#141414]/30 uppercase tracking-[0.1em] font-medium">
                           <RefreshCcw size={14} />
-                          Last updated: {summary?.last_updated ? format(parseISO(summary.last_updated), 'dd MMM yyyy, HH:mm') : format(new Date(), 'dd MMM yyyy, HH:mm')}
+                          Diperbarui: {summary?.last_updated ? format(parseISO(summary.last_updated), 'dd MMM yyyy, HH:mm') : format(new Date(), 'dd MMM yyyy, HH:mm')}
                         </div>
                       </div>
                     </div>
@@ -703,7 +778,7 @@ export default function App() {
       <footer className="bg-[#7A2E0E] text-[#F1EEE8] py-20 px-6">
         <div className="max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-center gap-12">
           <div className="flex items-center gap-8">
-            <img src="/src/logo/Logo.png" alt="Logo" className="h-12 w-auto brightness-0 invert" />
+            <img src={kanaLogo} alt="Logo" className="h-12 w-auto brightness-0 invert" />
             <div className="h-10 w-px bg-white/10" />
             <span className="font-serif italic text-3xl tracking-tight">Kana Insights AI</span>
           </div>
@@ -721,6 +796,7 @@ function DataManagementPage({ onDataUpdate, summary, onClearData }: { onDataUpda
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [uploadingMessage, setUploadingMessage] = useState<string | null>(null);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, platform: string) => {
     const file = event.target.files?.[0];
@@ -729,92 +805,62 @@ function DataManagementPage({ onDataUpdate, summary, onClearData }: { onDataUpda
     setUploading(true);
     setError(null);
     setSuccess(null);
+    setUploadingMessage('Uploading and analyzing file...');
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        try {
-          const rawData = results.data as any[];
-          
-          // Map CSV data to Mention structure for analysis
-          const mentionsToAnalyze = rawData.map((row, idx) => {
-            // Flexible date column detection
-            const dateKeys = ['date', 'publish_date', 'created_at', 'timestamp', 'published_at', 'time', 'created', 'published', 'tanggal', 'waktu'];
-            const foundDateKey = Object.keys(row).find(k => dateKeys.includes(k.toLowerCase().trim()));
-            
-            let rawDate = foundDateKey ? row[foundDateKey] : null;
-            
-            // If still not found, try to find any column that contains a date-like string
-            if (!rawDate) {
-              const anyDateKey = Object.keys(row).find(k => {
-                const val = String(row[k]);
-                return val.match(/^\d{4}-\d{2}-\d{2}/) || val.match(/^\d{2}\/\d{2}\/\d{4}/);
-              });
-              if (anyDateKey) rawDate = row[anyDateKey];
-            }
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const csvText = e.target?.result as string;
+      
+      try {
+        const response = await fetch(`/api/upload-csv?platform=${encodeURIComponent(platform)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/csv' },
+          body: csvText,
+        });
 
-            // Fallback to now if absolutely no date found
-            if (!rawDate) rawDate = new Date().toISOString();
-            
-            // Normalize date: YYYY-MM-DD
-            let normalizedDate = String(rawDate);
-            if (normalizedDate.includes('T')) {
-              normalizedDate = normalizedDate.split('T')[0];
-            } else if (normalizedDate.includes(' ')) {
-              normalizedDate = normalizedDate.split(' ')[0];
-            }
-            
-            // Basic cleanup for other formats (e.g. 2025-09-23 12:00:00)
-            if (normalizedDate.match(/^\d{4}-\d{2}-\d{2}/)) {
-              normalizedDate = normalizedDate.substring(0, 10);
-            }
+        const rawResult = await response.text();
+        const result = rawResult.trim()
+          ? (() => {
+              try {
+                return JSON.parse(rawResult);
+              } catch {
+                return null;
+              }
+            })()
+          : null;
 
-            return {
-              id: `temp-${idx}`,
-              content: row.content || row.text || row.Review || row.comment || row.caption || '',
-              date: normalizedDate,
-              source: platform,
-              author: row.author || row.user || row.username || 'Anonymous',
-              reach: parseInt(row.reach || row.likes || row.followers || '0')
-            };
-          }).filter(m => m.content.length > 0);
-
-          if (mentionsToAnalyze.length === 0) {
-            throw new Error("No valid review content found in CSV");
-          }
-
-          // Run sentiment analysis via Gemini
-          const analyses = await analyzeSentiment(mentionsToAnalyze);
-
-          // Combine data for storage
-          const reviewsToStore = mentionsToAnalyze.map((m, idx) => ({
-            platform: m.source,
-            content: m.content,
-            date: m.date,
-            sentiment: analyses[idx].sentiment,
-            entity: analyses[idx].entity,
-            score: analyses[idx].score
-          }));
-
-          // Upload to persistent storage
-          const response = await fetch('/api/upload', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ reviews: reviewsToStore })
-          });
-
-          if (!response.ok) throw new Error("Failed to upload to server");
-
-          setSuccess(`Successfully analyzed and stored ${reviewsToStore.length} reviews from ${platform}.`);
-          onDataUpdate();
-        } catch (err: any) {
-          setError(err.message || "An error occurred during processing");
-        } finally {
-          setUploading(false);
+        if (!response.ok) {
+          const errorMessage =
+            (result && typeof result === 'object' && 'error' in result && typeof (result as any).error === 'string'
+              ? (result as any).error
+              : null) ||
+            (rawResult.trim() ? rawResult : null) ||
+            `Server responded with status ${response.status}`;
+          throw new Error(errorMessage);
         }
+
+        setSuccess(
+          (result && typeof result === 'object' && 'message' in result && typeof (result as any).message === 'string'
+            ? (result as any).message
+            : null) ||
+            'Upload successful!'
+        );
+        onDataUpdate(); // Refresh the main dashboard data
+
+      } catch (err: any) {
+        console.error("Upload error:", err);
+        setError(err.message || "An error occurred during processing");
+      } finally {
+        setUploading(false);
+        setUploadingMessage(null);
       }
-    });
+    };
+    reader.onerror = () => {
+      setError("Failed to read the file.");
+      setUploading(false);
+      setUploadingMessage(null);
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -874,10 +920,10 @@ function DataManagementPage({ onDataUpdate, summary, onClearData }: { onDataUpda
         />
       </div>
 
-      {uploading && (
+      {uploading && uploadingMessage && (
         <div className="flex items-center justify-center gap-4 p-8 bg-[#A5532D]/5 rounded-2xl border border-[#A5532D]/10">
           <RefreshCcw className="animate-spin text-[#A5532D]" />
-          <p className="font-mono text-sm text-[#A5532D] uppercase tracking-widest font-bold">Processing & Analyzing Data...</p>
+          <p className="font-mono text-sm text-[#A5532D] uppercase tracking-widest font-bold">{uploadingMessage}</p>
         </div>
       )}
 
@@ -940,7 +986,6 @@ function DataManagementPage({ onDataUpdate, summary, onClearData }: { onDataUpda
     </div>
   );
 }
-
 function UploadCard({ platform, icon, onUpload, disabled }: { platform: string, icon: React.ReactNode, onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void, disabled: boolean }) {
   return (
     <div className="bg-white p-10 rounded-3xl border border-[#7A2E0E]/5 hover:shadow-xl transition-all group relative overflow-hidden">
@@ -958,10 +1003,17 @@ function UploadCard({ platform, icon, onUpload, disabled }: { platform: string, 
           disabled && "opacity-50 cursor-not-allowed pointer-events-none"
         )}>
           <input type="file" accept=".csv" className="hidden" onChange={onUpload} disabled={disabled} />
-          <span className="flex items-center justify-center gap-2">
-            <Upload size={14} />
-            Select File
-          </span>
+          {disabled ? (
+            <span className="flex items-center justify-center gap-2">
+              <RefreshCcw className="animate-spin" size={14} />
+              Uploading...
+            </span>
+          ) : (
+            <span className="flex items-center justify-center gap-2">
+              <Upload size={14} />
+              Select File
+            </span>
+          )}
         </label>
       </div>
     </div>
@@ -1191,48 +1243,6 @@ function LegendItem({ color, label, isLine }: { color: string, label: string, is
         isLine ? "w-4 h-1" : "w-2.5 h-2.5"
       )} style={{ backgroundColor: color }} />
       <span className="text-[10px] font-mono text-[#141414]/60 uppercase tracking-wider">{label}</span>
-    </div>
-  );
-}
-
-          <motion.img
-            key={index}
-            src={reviews[index]}
-            initial={{ opacity: 0, scale: 1.05 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
-            className="w-full h-full object-cover"
-          />
-        </AnimatePresence>
-
-        <button
-          onClick={prev}
-          className="absolute left-6 top-1/2 -translate-y-1/2 p-3 bg-white/90 hover:bg-white rounded-full shadow-xl transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm"
-        >
-          <ChevronLeft size={24} className="text-[#141414]" />
-        </button>
-        <button
-          onClick={next}
-          className="absolute right-6 top-1/2 -translate-y-1/2 p-3 bg-white/90 hover:bg-white rounded-full shadow-xl transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm"
-        >
-          <ChevronRight size={24} className="text-[#141414]" />
-        </button>
-      </div>
-
-      {/* Dot Indicators */}
-      <div className="flex justify-center gap-3 mt-10">
-        {reviews.map((_, dotIndex) => (
-          <button
-            key={dotIndex}
-            onClick={() => setIndex(dotIndex)}
-            className={cn(
-              "h-1.5 rounded-full transition-all duration-500",
-              dotIndex === index ? "bg-[#A5532D] w-10" : "bg-[#141414]/10 w-2 hover:bg-[#141414]/20"
-            )}
-          />
-        ))}
-      </div>
     </div>
   );
 }

@@ -44,6 +44,9 @@ export interface DashboardInsights {
  * ===== HELPER: SAFE JSON PARSER =====
  */
 function safeJSONParse<T>(text: string, fallback: T): T {
+  if (typeof text !== 'string' || !text.trim().length) {
+    return fallback;
+  }
   try {
     // Bersihkan kemungkinan ```json ``` wrapper
     const cleaned = text
@@ -67,33 +70,56 @@ export const analyzeSentiment = async (
   if (!apiKey) return [];
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-flash",
+    model: "gemini-1.5-flash-latest",
   });
 
-  const prompt = `
-Analyze the sentiment of the following mentions for "Kana Coffee".
-Return ONLY a valid JSON array.
+  const analyzeMention = async (mention: Mention): Promise<SentimentAnalysis> => {
+    const prompt = `
+Analyze the sentiment of the following review for "Kana Coffee".
+The review is from the platform: ${mention.source}.
 
-Format:
-[
-  {
-    "mentionId": "string",
-    "sentiment": "positive | neutral | negative",
-    "score": number,
-    "explanation": "string",
-    "keywords": ["string"],
-    "entity": "string"
-  }
-]
+Review: "${mention.content}"
 
-Mentions:
-${mentions.map((m) => `[${m.id}] ${m.content}`).join("\n")}
+Return ONLY a valid JSON object with the following structure.
+Do not include any other text or markdown.
+
+{
+  "mentionId": "${mention.id}",
+  "sentiment": "positive" | "neutral" | "negative",
+  "score": number,
+  "explanation": "A brief explanation of why this sentiment was chosen.",
+  "keywords": ["list", "of", "keywords"],
+  "entity": "The main topic discussed, e.g., 'Service', 'Price', 'Quality', 'Ambiance', 'General'."
+}
 `;
+    try {
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      // Use a fallback that includes the original mentionId
+      return safeJSONParse<SentimentAnalysis>(text, {
+        mentionId: mention.id,
+        sentiment: 'neutral',
+        score: 0,
+        explanation: 'Failed to parse model output.',
+        keywords: [],
+        entity: 'General'
+      });
+    } catch (error) {
+      console.error(`Error analyzing mention ${mention.id}:`, error);
+      // Return a default object on error
+      return {
+        mentionId: mention.id,
+        sentiment: 'neutral',
+        score: 0,
+        explanation: 'An API error occurred.',
+        keywords: [],
+        entity: 'General'
+      };
+    }
+  };
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
-
-  return safeJSONParse<SentimentAnalysis[]>(text, []);
+  const results = await Promise.all(mentions.map(analyzeMention));
+  return results;
 };
 
 /**
@@ -112,7 +138,7 @@ export const getDashboardInsights = async (
   }
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-flash",
+    model: "gemini-1.5-flash-latest",
   });
 
   const dataContext = mentions.map((m) => {

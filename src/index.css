@@ -34,10 +34,33 @@
     width: 100%;
     height: 100%;
     z-index: -1;
-    background-image: url('/input_file_0.png');
-    background-size: 400px;
+    background-color: #E8DCCB;
+    background-image:
+      url('/pattern-kana.png'),
+      radial-gradient(circle at 0 0, transparent 72px, #B8A486 73px, #B8A486 118px, transparent 119px),
+      radial-gradient(circle at 150px 150px, transparent 72px, #B8A486 73px, #B8A486 118px, transparent 119px),
+      radial-gradient(circle at 0 0, transparent 18px, #E8DCCB 19px, #E8DCCB 42px, transparent 43px),
+      radial-gradient(circle at 150px 150px, transparent 18px, #E8DCCB 19px, #E8DCCB 42px, transparent 43px),
+      radial-gradient(circle at 75px 75px, #B8A486 0 16px, transparent 17px),
+      radial-gradient(circle at 75px 75px, #E8DCCB 0 8px, transparent 9px);
+    background-size:
+      420px auto,
+      300px 300px,
+      300px 300px,
+      300px 300px,
+      300px 300px,
+      300px 300px,
+      300px 300px;
     background-repeat: repeat;
-    opacity: 1;
+    background-position:
+      center top,
+      top left,
+      top left,
+      top left,
+      top left,
+      top left,
+      top left;
+    opacity: 0.5;
   }
 
   .kana-bg-overlay {
@@ -47,7 +70,33 @@
     width: 100%;
     height: 100%;
     z-index: -1;
-    background-color: rgba(232, 220, 203, 0.88); /* ~88% soft cream overlay */
+    background: linear-gradient(
+      180deg,
+      rgba(232, 220, 203, 0.8) 0%,
+      rgba(241, 238, 232, 0.88) 100%
+    );
+  }
+
+  @media (max-width: 768px) {
+    .kana-bg-pattern {
+      background-size:
+        320px auto,
+        220px 220px,
+        220px 220px,
+        220px 220px,
+        220px 220px,
+        220px 220px,
+        220px 220px;
+      opacity: 0.42;
+    }
+
+    .kana-bg-overlay {
+      background: linear-gradient(
+        180deg,
+        rgba(232, 220, 203, 0.84) 0%,
+        rgba(241, 238, 232, 0.92) 100%
+      );
+    }
   }
 }
 

@@ -1,42 +1,75 @@
 import React, { useState, useEffect, useRef } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 const images = [
-  "/what-customers-say/customer1.png",
-  "/what-customers-say/customer2.png",
-  "/what-customers-say/customer3.png",
-  "/what-customers-say/customer4.png"
+  "/what-customers-say/1.png",
+  "/what-customers-say/2.png",
+  "/what-customers-say/3.png",
+  "/what-customers-say/4.png"
 ];
 
 export default function ReviewCarousel() {
   const [active, setActive] = useState(0);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
+  const startAutoSlide = () => {
     intervalRef.current = setInterval(() => {
       setActive((prev) => (prev + 1) % images.length);
-    }, 10000);
+    }, 7000);
+  };
+
+  const resetAutoSlide = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    startAutoSlide();
+  };
+
+  useEffect(() => {
+    startAutoSlide();
     return () => intervalRef.current && clearInterval(intervalRef.current);
   }, []);
 
   const handleDotClick = (idx: number) => {
     setActive(idx);
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = setInterval(() => {
-        setActive((prev) => (prev + 1) % images.length);
-      }, 10000);
-    }
+    resetAutoSlide();
+  };
+
+  const handlePrev = () => {
+    setActive((prev) => (prev - 1 + images.length) % images.length);
+    resetAutoSlide();
+  };
+
+  const handleNext = () => {
+    setActive((prev) => (prev + 1) % images.length);
+    resetAutoSlide();
   };
 
   return (
     <div className="flex flex-col items-center">
-      <div className="w-full max-w-2xl mx-auto rounded-3xl shadow-xl overflow-hidden aspect-[16/9] bg-[#141414]/10">
+      <div className="relative w-full max-w-2xl mx-auto rounded-3xl shadow-xl overflow-hidden aspect-[16/9] bg-[#141414]/10 group">
         <img
           src={images[active]}
           alt={`Customer Review ${active + 1}`}
           className="w-full h-full object-cover"
           style={{ aspectRatio: "16/9" }}
         />
+
+        <button
+          onClick={handlePrev}
+          aria-label="Slide sebelumnya"
+          className="absolute left-3 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/90 text-[#7A2E0E] shadow-md flex items-center justify-center hover:bg-white transition-all"
+        >
+          <ChevronLeft size={20} />
+        </button>
+
+        <button
+          onClick={handleNext}
+          aria-label="Slide berikutnya"
+          className="absolute right-3 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/90 text-[#7A2E0E] shadow-md flex items-center justify-center hover:bg-white transition-all"
+        >
+          <ChevronRight size={20} />
+        </button>
       </div>
       <div className="flex gap-2 mt-8 justify-center">
         {images.map((_, idx) => (

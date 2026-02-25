@@ -8,13 +8,36 @@ This contains everything you need to run your app locally.
 
 View your app in AI Studio: https://ai.studio/apps/00c99f4d-0059-491e-aca5-39360ce5019a
 
+## ⚠️ IMPORTANT: Setup API Key First
+
+**Sentiment analysis WILL NOT WORK without a Gemini API key!**  
+All reviews will be analyzed as "neutral" if the API key is missing.
+
+📖 **[Read SETUP_API_KEY.md for detailed instructions](SETUP_API_KEY.md)**
+
+Quick setup:
+1. Get free API key: https://makersuite.google.com/app/apikey
+2. Add to `.env` file: `GEMINI_API_KEY=your_actual_key`
+3. Restart the server
+
 ## Run Locally
 
 **Prerequisites:**  Node.js
 
-
 1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+   ```bash
+   npm install
+   ```
+
+2. **Set up your Gemini API key** (see above)
+
 3. Run the app:
-   `npm run dev`
+   ```bash
+   # Terminal 1: Start backend server
+   npm run server
+   
+   # Terminal 2: Start frontend dev server
+   npm run dev
+   ```
+
+4. Open http://localhost:5180 in your browser
