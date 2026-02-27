@@ -11,6 +11,10 @@ import { PassThrough } from 'stream';
 dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 // --- DATABASE INITIALIZATION ---
 const db = sqlite3('kana_insights.db');
@@ -35,6 +39,39 @@ if (!hasUploadedAt) {
 }
 
 // --- MIDDLEWARE ---
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  if (!origin) {
+    next();
+    return;
+  }
+
+  const isAllowedOrigin = allowedOrigins.length === 0 || allowedOrigins.includes(origin);
+
+  if (!isAllowedOrigin) {
+    if (req.method === 'OPTIONS') {
+      res.status(403).send('Origin not allowed');
+      return;
+    }
+    next();
+    return;
+  }
+
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+
+  next();
+});
+
 // We use the JSON parser for other routes. The CSV route will handle the raw stream.
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(express.static('dist'));
@@ -74,6 +111,11 @@ interface SentimentAnalysis {
   entity: string;
 }
 
+interface BatchAnalysisResult {
+  results: SentimentAnalysis[];
+  stopFurtherAiCalls?: boolean;
+}
+
 const normalizeSentiment = (value: unknown): SentimentAnalysis['sentiment'] => {
   if (value === 'positive' || value === 'negative' || value === 'neutral') {
     return value;
@@ -94,8 +136,116 @@ function safeJSONParse<T>(text: string, fallback: T): T {
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-const analyzeBatch = async (mentions: Mention[], retryCount = 0): Promise<SentimentAnalysis[]> => {
-  if (!apiKey) return mentions.map(m => ({ mentionId: m.id, sentiment: 'neutral', score: 0, entity: 'General' }));
+const normalizeDateValue = (value: unknown): string | null => {
+  if (value === null || value === undefined) return null;
+
+  const text = String(value).trim();
+  if (!text) return null;
+
+  const unix = text.match(/^\d{10,13}$/);
+  if (unix) {
+    const raw = Number(text);
+    const asMs = text.length === 10 ? raw * 1000 : raw;
+    const fromUnix = new Date(asMs);
+    if (!Number.isNaN(fromUnix.getTime())) {
+      const year = fromUnix.getUTCFullYear();
+      if (year >= 2000 && year <= 2100) {
+        return fromUnix.toISOString().slice(0, 10);
+      }
+    }
+  }
+
+  const asDate = new Date(text);
+  if (!Number.isNaN(asDate.getTime())) {
+    const year = asDate.getUTCFullYear();
+    if (year >= 2000 && year <= 2100) {
+      return asDate.toISOString().slice(0, 10);
+    }
+  }
+
+  const ddmmyyyy = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (ddmmyyyy) {
+    const day = Number(ddmmyyyy[1]);
+    const month = Number(ddmmyyyy[2]);
+    const year = Number(ddmmyyyy[3]);
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+  }
+
+  const yyyymmdd = text.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+  if (yyyymmdd) {
+    const year = Number(yyyymmdd[1]);
+    const month = Number(yyyymmdd[2]);
+    const day = Number(yyyymmdd[3]);
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+  }
+
+  return null;
+};
+
+const normalizeHeader = (key: string): string => key.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const DATE_KEYS = new Set([
+  'date',
+  'publishdate',
+  'publishedat',
+  'publishedtime',
+  'createdat',
+  'createdtime',
+  'createtime',
+  'timestamp',
+  'time',
+  'datetime',
+  'postdate',
+  'posttime',
+  'uploadtime',
+  'tanggal',
+  'waktu'
+]);
+
+const DATE_HINTS = ['date', 'time', 'created', 'create', 'publish', 'posted', 'timestamp', 'epoch', 'unix', 'tanggal', 'waktu'];
+
+const getRowDate = (row: Record<string, unknown>): string | null => {
+  const keys = Object.keys(row);
+
+  const exactDateKey = keys.find((key) => DATE_KEYS.has(normalizeHeader(key)));
+  if (exactDateKey) {
+    const normalized = normalizeDateValue(row[exactDateKey]);
+    if (normalized) return normalized;
+  }
+
+  const hintedDateKey = keys.find((key) => {
+    const normalized = normalizeHeader(key);
+    return DATE_HINTS.some((hint) => normalized.includes(hint));
+  });
+  if (hintedDateKey) {
+    const normalized = normalizeDateValue(row[hintedDateKey]);
+    if (normalized) return normalized;
+  }
+
+  for (const key of keys) {
+    const normalized = normalizeDateValue(row[key]);
+    if (normalized) return normalized;
+  }
+
+  return null;
+};
+
+const buildFallbackAnalyses = (mentions: Mention[]): SentimentAnalysis[] =>
+  mentions.map((mention) => ({
+    mentionId: mention.id,
+    sentiment: 'neutral',
+    score: 0.5,
+    entity: 'General'
+  }));
+
+const analyzeBatch = async (mentions: Mention[], retryCount = 0): Promise<BatchAnalysisResult> => {
+  if (!apiKey) {
+    return { results: buildFallbackAnalyses(mentions), stopFurtherAiCalls: true };
+  }
 
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
@@ -155,7 +305,7 @@ Return ONLY a valid JSON array with NO markdown, one object per review:
       }
     } catch (e) {
       console.error('Failed to parse batch response, using fallback');
-      return mentions.map((m): SentimentAnalysis => ({ mentionId: m.id, sentiment: 'neutral', score: 0.5, entity: 'General' }));
+      return { results: buildFallbackAnalyses(mentions) };
     }
     
     // Ensure all mentions have results
@@ -174,8 +324,21 @@ Return ONLY a valid JSON array with NO markdown, one object per review:
     });
     
     console.log(`[Parsed Batch Results]: ${results.length} reviews analyzed`);
-    return results;
+    return { results };
   } catch (error: any) {
+    const errorDetailsText = JSON.stringify(error?.errorDetails || '').toLowerCase();
+    const isQuotaExhausted =
+      error?.status === 429 && (
+        errorDetailsText.includes('perday') ||
+        errorDetailsText.includes('quota exceeded') ||
+        errorDetailsText.includes('freetier')
+      );
+
+    if (isQuotaExhausted) {
+      console.warn('Gemini quota exhausted. Remaining batches will use fallback sentiment to avoid long upload wait.');
+      return { results: buildFallbackAnalyses(mentions), stopFurtherAiCalls: true };
+    }
+
     // Handle rate limit errors with retry
     if (error?.status === 429 && retryCount < 3) {
       const waitTime = Math.pow(2, retryCount) * 15000; // 15s, 30s, 60s
@@ -184,12 +347,16 @@ Return ONLY a valid JSON array with NO markdown, one object per review:
       return analyzeBatch(mentions, retryCount + 1);
     }
     console.error(`Error analyzing batch:`, error);
-    return mentions.map((m): SentimentAnalysis => ({ mentionId: m.id, sentiment: 'neutral', score: 0.5, entity: 'General' }));
+    return { results: buildFallbackAnalyses(mentions) };
   }
 };
 
 
 // --- API ENDPOINTS ---
+
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
 
 app.post('/api/upload-csv', async (req, res) => {
   console.log('Received CSV upload request (streaming).');
@@ -214,13 +381,7 @@ app.post('/api/upload-csv', async (req, res) => {
   parser.on('data', (row: any) => {
     rowCount++;
     // Prepare the mention object
-    const dateKeys = ['date', 'publish_date', 'created_at', 'timestamp', 'published_at', 'time', 'created', 'published', 'tanggal', 'waktu'];
-    const foundDateKey = Object.keys(row).find(k => dateKeys.includes(k.toLowerCase().trim()));
-    let rawDate = foundDateKey ? row[foundDateKey] : new Date().toISOString();
-    let normalizedDate = String(rawDate).split('T')[0].split(' ')[0];
-    if (normalizedDate.match(/^\d{4}-\d{2}-\d{2}/)) {
-      normalizedDate = normalizedDate.substring(0, 10);
-    }
+    const normalizedDate = getRowDate(row) || new Date().toISOString().slice(0, 10);
     const content = row.content || row.text || row.Review || row.comment || row.caption || '';
     
     if (content) {
@@ -241,15 +402,26 @@ app.post('/api/upload-csv', async (req, res) => {
       // Process reviews in batches (15 reviews per batch, 5 batches per minute = 75 reviews/minute)
       const BATCH_SIZE = 15;
       const analyses: SentimentAnalysis[] = [];
+      let skipAiForRemainingBatches = false;
       
       for (let i = 0; i < mentionsToAnalyze.length; i += BATCH_SIZE) {
         const batch = mentionsToAnalyze.slice(i, i + BATCH_SIZE);
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
         const totalBatches = Math.ceil(mentionsToAnalyze.length / BATCH_SIZE);
+
+        if (skipAiForRemainingBatches) {
+          analyses.push(...buildFallbackAnalyses(batch));
+          continue;
+        }
         
         console.log(`Analyzing batch ${batchNum}/${totalBatches} (${batch.length} reviews)...`);
-        const batchResults = await analyzeBatch(batch);
-        analyses.push(...batchResults);
+        const batchResult = await analyzeBatch(batch);
+        analyses.push(...batchResult.results);
+
+        if (batchResult.stopFurtherAiCalls) {
+          skipAiForRemainingBatches = true;
+          continue;
+        }
         
         // Add delay between batches to stay within rate limit (12 seconds = 5 batches per minute)
         if (i + BATCH_SIZE < mentionsToAnalyze.length) {
@@ -288,8 +460,12 @@ app.post('/api/upload-csv', async (req, res) => {
       
       transaction(reviewsToStore);
       console.log('Successfully stored reviews.');
-      
-      res.status(200).json({ message: `Successfully analyzed and stored ${reviewsToStore.length} reviews.` });
+
+      const message = skipAiForRemainingBatches
+        ? `Upload selesai: ${reviewsToStore.length} reviews disimpan. Sebagian analisis memakai fallback karena kuota Gemini habis.`
+        : `Successfully analyzed and stored ${reviewsToStore.length} reviews.`;
+
+      res.status(200).json({ message });
     } catch (error) {
       console.error('--- ERROR DURING STREAM COMPLETION ---', error);
       if (!res.headersSent) {

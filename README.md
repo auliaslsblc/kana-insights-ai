@@ -41,3 +41,15 @@ Quick setup:
    ```
 
 4. Open http://localhost:5180 in your browser
+
+## Deploy frontend + backend terpisah
+
+📖 Panduan lengkap: [DEPLOY.md](DEPLOY.md)
+
+Jika frontend di-host sebagai static site (misalnya Vercel) dan backend berjalan di server lain, set environment variable ini di frontend:
+
+```bash
+VITE_API_BASE_URL=https://your-backend-domain.com
+```
+
+Tanpa variable tersebut, request akan tetap ke origin frontend (`/api/...`) dan bisa menghasilkan error `NOT_FOUND` saat endpoint backend tidak ada di host frontend.

@@ -56,6 +56,7 @@ import { motion, useInView } from 'framer-motion';
 
 import { MOCK_MENTIONS, Mention } from './constants';
 import kanaLogo from './logo/Logo.png';
+import { buildApiUrl } from './services/api';
 
 import ReviewCarousel from './ReviewCarousel';
 
@@ -161,9 +162,9 @@ export default function App() {
     try {
       const sentimentQuery = filter ? `?sentiment=${filter}` : '';
       const [dataRes, topicsRes, trendsRes] = await Promise.all([
-        fetch(`/api/data${sentimentQuery}`),
-        fetch('/api/topics'),
-        fetch('/api/trends')
+        fetch(buildApiUrl(`/api/data${sentimentQuery}`)),
+        fetch(buildApiUrl('/api/topics')),
+        fetch(buildApiUrl('/api/trends'))
       ]);
       
       const data = await dataRes.json();
@@ -227,7 +228,7 @@ export default function App() {
     setLoading(true);
     try {
       console.log("Starting clear data process...");
-      const response = await fetch('/api/data', { method: 'DELETE' });
+      const response = await fetch(buildApiUrl('/api/data'), { method: 'DELETE' });
       if (!response.ok) throw new Error("Failed to clear data on server");
       
       console.log("Data cleared on server, updating local state...");
@@ -824,7 +825,7 @@ function DataManagementPage({ onDataUpdate, summary, onClearData }: { onDataUpda
       const csvText = e.target?.result as string;
       
       try {
-        const response = await fetch(`/api/upload-csv?platform=${encodeURIComponent(platform)}`, {
+        const response = await fetch(buildApiUrl(`/api/upload-csv?platform=${encodeURIComponent(platform)}`), {
           method: 'POST',
           headers: { 'Content-Type': 'text/csv' },
           body: csvText,
@@ -842,7 +843,11 @@ function DataManagementPage({ onDataUpdate, summary, onClearData }: { onDataUpda
           : null;
 
         if (!response.ok) {
+          const isNotFoundPage = response.status === 404 && rawResult.includes('NOT_FOUND');
           const errorMessage =
+            (isNotFoundPage
+              ? 'API backend tidak ditemukan. Pastikan backend server aktif dan VITE_API_BASE_URL mengarah ke URL backend yang benar.'
+              : null) ||
             (result && typeof result === 'object' && 'error' in result && typeof (result as any).error === 'string'
               ? (result as any).error
               : null) ||
