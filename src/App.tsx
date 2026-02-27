@@ -423,21 +423,33 @@ export default function App() {
           <>
             {/* 1. About Kana Coffee - White/Transparent */}
             <section id="about" className="py-32 md:py-40 px-6">
-              <div className="max-w-[900px] mx-auto text-center space-y-12">
+              <div className="max-w-[1100px] mx-auto text-center space-y-12">
                 <h2 className="font-serif italic text-6xl text-[#7A2E0E] tracking-tight">About Kana Coffee</h2>
-                <div className="space-y-8 text-xl leading-relaxed text-[#141414]/70 font-sans font-light">
-                  <p>
-                    Kana Coffee adalah brand kopi yang mengusung filosofi kebersamaan dalam setiap sajian. Berlandaskan semangat “A Cup of Coffee, A Bond of Togetherness,” Kana percaya bahwa secangkir kopi bukan sekadar minuman, melainkan medium untuk membangun koneksi dan menghadirkan momen yang lebih bermakna.
-                  </p>
-                  <p>
-                    Dengan komitmen pada kualitas biji kopi pilihan dan proses peracikan yang presisi, Kana menghadirkan cita rasa yang konsisten dan berkarakter. Setiap detail, mulai dari pemilihan bahan hingga penyajian, dirancang untuk memberikan pengalaman yang hangat dan profesional.
-                  </p>
-                  <p>
-                    Lebih dari sekadar tempat menikmati kopi, Kana adalah ruang untuk bertumbuh, berbagi ide, dan mempererat hubungan. Melalui dedikasi terhadap kualitas dan pelayanan, Kana terus menghadirkan pengalaman kopi yang autentik dan berkelas.
-                  </p>
+                <div className="grid grid-cols-1 md:grid-cols-[0.8fr_1.2fr] items-center gap-8 md:gap-12 mt-10">
+                  <div className="max-w-[340px] md:max-w-[360px] mx-auto md:mx-0">
+                    <div className="bg-white/70 p-3 md:p-4 rounded-3xl border border-[#7A2E0E]/10 shadow-[0_20px_50px_rgba(122,46,14,0.08)]">
+                      <img
+                        src="/about-kana-coffee.png"
+                        alt="Suasana coffeeshop Kana Coffee"
+                        className="w-full h-auto object-cover rounded-2xl"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-6 text-lg md:text-xl leading-relaxed text-[#141414]/70 font-sans font-light text-left">
+                    <p>
+                      Kana Coffee adalah brand kopi yang mengusung filosofi kebersamaan dalam setiap sajian. Berlandaskan semangat “A Cup of Coffee, A Bond of Togetherness,” Kana percaya bahwa secangkir kopi bukan sekadar minuman, melainkan medium untuk membangun koneksi dan menghadirkan momen yang lebih bermakna.
+                    </p>
+                    <p>
+                      Dengan komitmen pada kualitas biji kopi pilihan dan proses peracikan yang presisi, Kana menghadirkan cita rasa yang konsisten dan berkarakter. Setiap detail, mulai dari pemilihan bahan hingga penyajian, dirancang untuk memberikan pengalaman yang hangat dan profesional.
+                    </p>
+                    <p>
+                      Lebih dari sekadar tempat menikmati kopi, Kana adalah ruang untuk bertumbuh, berbagi ide, dan mempererat hubungan. Melalui dedikasi terhadap kualitas dan pelayanan, Kana terus menghadirkan pengalaman kopi yang autentik dan berkelas.
+                    </p>
+                  </div>
                 </div>
-                
-                <div className="pt-20 border-t border-[#141414]/5">
+
+                <div className="pt-16 border-t border-[#141414]/5">
                   <h3 className="font-serif italic text-3xl mb-8 text-[#141414]">Research Context</h3>
                   <p className="text-lg text-[#141414]/60 max-w-2xl mx-auto leading-relaxed italic">
                     Kana Coffee dipilih sebagai objek studi dalam sistem Kana Insights AI untuk menganalisis sentimen publik dan memetakan reputasi online berdasarkan data media sosial (Instagram, TikTok, dan Google Review).
