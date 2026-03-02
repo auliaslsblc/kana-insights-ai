@@ -38,13 +38,13 @@ BACKEND_PID=$!
 sleep 3
 
 # Start frontend
-echo -e "${GREEN}🎨 Starting frontend dev server on port 5180...${NC}"
+echo -e "${GREEN}🎨 Starting frontend dev server on port 5173...${NC}"
 npm run dev &
 FRONTEND_PID=$!
 
 echo ""
 echo -e "${GREEN}✅ Both servers started!${NC}"
-echo -e "${GREEN}📱 Frontend: http://localhost:5180${NC}"
+echo -e "${GREEN}📱 Frontend: http://localhost:5173${NC}"
 echo -e "${GREEN}🔧 Backend API: http://localhost:3000${NC}"
 echo ""
 echo -e "${YELLOW}Press Ctrl+C to stop both servers${NC}"

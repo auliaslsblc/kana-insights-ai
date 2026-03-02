@@ -40,7 +40,9 @@ Quick setup:
    npm run dev
    ```
 
-4. Open http://localhost:5180 in your browser
+4. Open http://localhost:5173 in your browser
+
+> Note: `5173` hanya untuk local development. Saat deploy ke Vercel, set `VITE_API_BASE_URL` ke domain backend production.
 
 ## Deploy frontend + backend terpisah
 

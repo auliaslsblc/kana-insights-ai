@@ -16,6 +16,21 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const originMatchesRule = (origin: string, rule: string): boolean => {
+  if (rule === '*') return true;
+  if (!rule.includes('*')) return origin === rule;
+
+  const regexPattern = `^${rule.split('*').map(escapeRegex).join('.*')}$`;
+  return new RegExp(regexPattern).test(origin);
+};
+
+const isOriginAllowed = (origin: string): boolean => {
+  if (allowedOrigins.length === 0) return true;
+  return allowedOrigins.some((rule) => originMatchesRule(origin, rule));
+};
+
 // --- DATABASE INITIALIZATION ---
 const db = sqlite3('kana_insights.db');
 db.exec(`
@@ -47,7 +62,7 @@ app.use((req, res, next) => {
     return;
   }
 
-  const isAllowedOrigin = allowedOrigins.length === 0 || allowedOrigins.includes(origin);
+  const isAllowedOrigin = isOriginAllowed(origin);
 
   if (!isAllowedOrigin) {
     if (req.method === 'OPTIONS') {
