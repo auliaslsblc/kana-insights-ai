@@ -53,6 +53,28 @@ Set environment variable di project frontend:
 
 Lalu redeploy frontend.
 
+## 2b) Deploy Frontend (Netlify)
+
+Kalau frontend di Netlify, prinsipnya sama: backend tetap terpisah.
+
+### Langkah setup di Netlify
+
+1. Import repository GitHub ini ke Netlify.
+2. Build command: `npm run build`
+3. Publish directory: `dist`
+4. Pastikan file `netlify.toml` ada di root project (untuk SPA redirect).
+
+Set environment variable di site Netlify:
+
+- `VITE_API_BASE_URL=https://your-backend-domain.com`
+
+Lalu trigger redeploy.
+
+### Verifikasi setelah deploy
+
+- Buka web Netlify kamu, upload CSV.
+- Pastikan request menuju `https://your-backend-domain.com/api/upload-csv?...` (bukan `/api/upload-csv` di domain Netlify).
+
 ## 3) Checklist kalau upload CSV masih gagal
 
 - Backend URL benar dan live (`/api/health` sukses)

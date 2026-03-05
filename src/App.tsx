@@ -823,9 +823,11 @@ function DataManagementPage({ onDataUpdate, summary, onClearData }: { onDataUpda
     const reader = new FileReader();
     reader.onload = async (e) => {
       const csvText = e.target?.result as string;
+      const uploadUrl = buildApiUrl(`/api/upload-csv?platform=${encodeURIComponent(platform)}`);
+      const isRelativeApiUrl = uploadUrl.startsWith('/api/');
       
       try {
-        const response = await fetch(buildApiUrl(`/api/upload-csv?platform=${encodeURIComponent(platform)}`), {
+        const response = await fetch(uploadUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'text/csv' },
           body: csvText,
@@ -843,10 +845,15 @@ function DataManagementPage({ onDataUpdate, summary, onClearData }: { onDataUpda
           : null;
 
         if (!response.ok) {
-          const isNotFoundPage = response.status === 404 && rawResult.includes('NOT_FOUND');
+          const isNetlifyHost =
+            typeof window !== 'undefined' && window.location.hostname.includes('netlify.app');
+          const isNotFoundPage = response.status === 404;
+          const looksLikeHtmlErrorPage = /<html|<!doctype html>|<title>/i.test(rawResult);
           const errorMessage =
             (isNotFoundPage
-              ? 'API backend tidak ditemukan. Pastikan backend server aktif dan VITE_API_BASE_URL mengarah ke URL backend yang benar.'
+              ? isRelativeApiUrl || isNetlifyHost || looksLikeHtmlErrorPage
+                ? 'API backend tidak ditemukan. Kamu deploy frontend di Netlify, tapi endpoint API belum tersambung. Set environment variable VITE_API_BASE_URL ke URL backend production kamu (contoh Render/Railway), lalu redeploy.'
+                : 'Endpoint upload CSV tidak ditemukan (404). Pastikan URL backend benar.'
               : null) ||
             (result && typeof result === 'object' && 'error' in result && typeof (result as any).error === 'string'
               ? (result as any).error
